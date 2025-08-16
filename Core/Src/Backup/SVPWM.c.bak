@@ -1,0 +1,337 @@
+/*
+ * SVPWM.c
+ *
+ *  Created on: May 3, 2025
+ *      Author: acweiss
+ */
+
+// Function prototype for SVPWM is now in main.h
+/**
+ * SVPWM algorithm for 3-phase motors.
+ *
+ * @param Va     Alpha-axis component of reference vector
+ * @param Vb     Beta-axis component of reference vector
+ * @param VBus   DC bus voltage
+ * @param sector_out Pointer to int to receive sector (1..6)
+ * @param ChA_out Pointer to double to receive channel A duty
+ * @param ChB_out Pointer to double to receive channel B duty
+ * @param ChC_out Pointer to double to receive channel C duty
+ */
+
+#include "main.h" // Include main header for T_VAL and SQRT3
+#include "SVPWM.h"
+#include <stdio.h>
+#include "util.h" // Include ASW util header file
+#include <math.h> // Include math library for cos() and sin()
+
+int SVPWM(float Va, float Vb, float VBus, SVPWM_Output *output) {
+	float DELTA = 0;
+	int sector = 0;		// Initialize sector to 0 (=invalid)
+	int T1 = 0.0, T2 = 0.0, T0 = 0.0;
+	int ChA = 0.0, ChB = 0.0, ChC = 0.0;
+	float sqrt3Va = round_to((SQRT3 * Va), 5); // Use SQRT3 defined in main.h
+	output->error = 0; // Initialize error to 0
+
+	Va = round_to(Va, 5); // Round to 5 decimal places
+	Vb = round_to(Vb, 5); // Round to 5 decimal places
+//	printf("Gead: %g Va: %g Vb: %g sqrt3Va: %g \r\n", output->grad, Va, Vb, sqrt3Va);
+
+	//   printf("In SVPWM\r\n");
+	//   printf("Va: %g Vb: %g Sqrt3Va: %g \r\n", Va, Vb, sqrt3Va);
+
+//    if (Va >= 0.0) {
+//        if (Vb >= 0.0) {
+//            sector = (Vb <  sqrt3Va) ? 1 : 2;
+//        } else {
+//            sector = (Vb < -sqrt3Va) ? 5 : 6;
+//        }
+//    } else {		// Va < 0
+//        if (Vb > 0.0) {
+//            sector = (Vb > -sqrt3Va) ? 2 : 3;
+//        } else {
+//            sector = (Vb >  sqrt3Va) ? 4 : 5;
+//        }
+//    }
+
+	// Hack:
+
+//	float VbPlus = (Vb + sqrt3Va) < DELTA ? 0 : (Vb + sqrt3Va);
+//	float VbMinus = (Vb - sqrt3Va) < DELTA ? 0 : (Vb - sqrt3Va);
+//
+//	if (Va < 0) {
+//		if (Vb > 0) {
+//			if (VbPlus > 0) {
+//				sector = 2;
+//			} else {
+//				sector = 3;
+//			}
+//		} else { // Vb <= 0
+//			if (VbMinus >0) {
+//				sector = 4;
+//			} else {
+//				sector = 5;
+//			}
+//		}
+//	} else { // Va >= 0
+//		if (Vb < 0) {
+//			if (VbPlus < 0) {
+//				sector = 5;
+//			} else {
+//				sector = 6;
+//			}
+//		} else { // Vb >= 0
+//
+//			if (VbMinus < 0) {
+//				sector = 1;
+//			} else {
+//				sector = 2;
+//			}
+//		}
+//	}
+
+	if (Va < 0) {
+		if (Vb > 0) {
+			if ((Vb + sqrt3Va) > DELTA) {
+				sector = 2;
+			} else {
+				sector = 3;
+			}
+		} else { // Vb <= 0
+			if ((Vb - sqrt3Va) > DELTA) {
+				sector = 4;
+			} else {
+				sector = 5;
+			}
+		}
+	} else { // Va >= 0
+		if (Vb < 0) {
+			if ((Vb + sqrt3Va) < DELTA) {
+				sector = 5;
+			} else {
+				sector = 6;
+			}
+		} else { // Vb >= 0
+
+			if ((Vb - sqrt3Va) < DELTA) {
+				sector = 1;
+			} else {
+				sector = 2;
+			}
+		}
+	}
+
+//	printf("Grad: %g Sector: %d Soll: %d \r\n", output->grad, sector, output->sector_soll);
+//	printf("Vb+sqrt3Va: %g Vb-sqrt3Va: %g \r\n", (Vb + sqrt3Va), (Vb - sqrt3Va));
+
+//	printf("\r\n");
+
+	output->sector = sector;
+
+	if (sector == 0 || sector != output->sector_soll) {
+		return SVPWM_SECTOR_ERROR;   	// Invalid sector, return error
+	}
+
+	float Sqrt3Vb = round_to(SQRT3 * Vb, 4); // Precompute SQRT3 * Vb for efficiency
+
+	// Compute switching times based on sector
+	switch (sector) {
+	case 1:
+		T1 = (T_VAL / (2.0 * VBus)) * (3.0 * Va - Sqrt3Vb);
+		T2 = (T_VAL / VBus) * (Sqrt3Vb);
+		break;
+	case 2:
+		T1 = (T_VAL / (2.0 * VBus)) * (3.0 * Va + Sqrt3Vb);
+		T2 = (T_VAL / (2.0 * VBus)) * (-3.0 * Va + Sqrt3Vb);
+		break;
+	case 3:
+		T1 = (T_VAL / VBus) * (Sqrt3Vb);
+		T2 = (T_VAL / (2.0 * VBus)) * (-3.0 * Va - Sqrt3Vb);
+		break;
+	case 4:
+		T1 = (T_VAL / (2.0 * VBus)) * (-3.0 * Va + Sqrt3Vb);
+		T2 = (T_VAL / VBus) * (-Sqrt3Vb);
+		break;
+	case 5:
+		T1 = (T_VAL / (2.0 * VBus)) * (-3.0 * Va - Sqrt3Vb);
+		T2 = (T_VAL / (2.0 * VBus)) * (3.0 * Va - Sqrt3Vb);
+		break;
+	case 6:
+		T1 = (T_VAL / VBus) * (-Sqrt3Vb);
+		T2 = (T_VAL / (2.0 * VBus)) * (3.0 * Va + Sqrt3Vb);
+		break;
+	}
+
+	// Calculate T0 and check for overmodulation
+	T0 = T_VAL - T1 - T2;
+	if (T0 < 0.0 || T1 < 0.0 || T2 < 0.0) { // Check if any time is negative (indicates overmodulation or calculation issue)
+	// Optionally clamp/handle overmodulation instead of just failing
+		output->error = SVPWM_OVERMODULATION_ERROR;
+//		return SVPWM_OVERMODULATION_ERROR;
+	}
+
+	output->T0 = T0;
+	output->T1 = T1;
+	output->T2 = T2;
+
+	// Calculate duty cycles (compare values) for each channel based on sector
+	// These represent the timer counts for the compare registers
+	switch (sector) {
+	case 1:
+		ChA = T0 * 0.5;
+		ChB = ChA + T1;
+		ChC = ChB + T2;
+		break;
+	case 2:
+		ChB = T0 * 0.5;
+		ChA = ChB + T2;
+		ChC = ChA + T1;
+		break;
+	case 3:
+		ChB = T0 * 0.5;
+		ChC = ChB + T1;
+		ChA = ChC + T2;
+		break;
+	case 4:
+		ChC = T0 * 0.5;
+		ChB = ChC + T2;
+		ChA = ChB + T1;
+		break;
+	case 5:
+		ChC = T0 * 0.5;
+		ChA = ChC + T1;
+		ChB = ChA + T2;
+		break;
+	case 6:
+		ChA = T0 * 0.5;
+		ChC = ChA + T2;
+		ChB = ChC + T1;
+		break;
+	}
+
+//	//debug
+//	if (ChA < 5) {
+//		ChA = 5;
+//	}
+//	if (ChB < 5) {
+//		ChB = 5;
+//	}
+//	if (ChC < 5) {
+//		ChC = 5;
+//	}
+
+	// Output results
+	output->ChA = ChA;
+	output->ChB = ChB;
+	output->ChC = ChC;
+
+	// Apply the calculated duty cycles to the timer channels
+	// Ensure values do not exceed the timer's auto-reload value (ARR) which is T_VAL * 2
+	// Note: T_VAL is half the period counts. ARR should be set to T_VAL * 2 - 1 or similar.
+	// Assuming ARR = T_VAL * 2 for center-aligned mode.
+	// The calculated ChA, ChB, ChC should naturally be <= T_VAL * 2 if T0, T1, T2 are correct.
+	// Add checks or clamping if necessary.
+
+	// Example: Update Timer Compare Registers (adjust based on actual timer config)
+	// Make sure these values are treated as integers (timer counts)
+
+	TIM1->CCR1 = (uint32_t) ChA;
+	TIM1->CCR2 = (uint32_t) ChB;
+	TIM1->CCR3 = (uint32_t) ChC;
+
+	return 0; // No error
+}
+
+int SVPWM2(float Va, float Vb, float VBus, SVPWM_Output *output) {
+	float DELTA = 0;
+	int sector = 0;		// Initialize sector to 0 (=invalid)
+	float sqrt3Va = round_to((SQRT3 * Va), 5); // Use SQRT3 defined in main.h
+	output->error = 0; // Initialize error to 0
+	float ta = 0, tb = 0; // Initialize ta, tb, tc to 0
+	int ChA = 0.0, ChB = 0.0, ChC = 0.0;
+	output->T0 = output->T1 = output->T2 = 0.0;
+
+
+	Va = round_to(Va, 5); // Round to 5 decimal places
+	Vb = round_to(Vb, 5); // Round to 5 decimal places
+
+	// Scaling
+	float Ua = SQRT3 / VBus * Va;
+	float Ub = SQRT3 / Vbus * Vb;
+
+	float X = Ub;
+	float Y = (Ub + SQRT3 * Ua) / 2;
+	float Z = (Ub - SQRT3 * Ua) / 2;
+
+	if (Va < 0) {
+		if (Vb > 0) {
+			if ((Vb + sqrt3Va) > DELTA) {
+				sector = 2;	// Y,Z
+				ta = Y;
+				tb = Z;
+			} else {
+				sector = 3;	// x,-y
+				ta = X;
+				tb = -Y;
+			}
+		} else { // Vb <= 0
+			if ((Vb - sqrt3Va) > DELTA) {
+				sector = 4;	// z,-x
+				ta = Z;
+				tb = -X;
+			} else {
+				sector = 5;	// -y,-z
+				ta = -Y;
+				tb = -Z;
+			}
+		}
+	} else { // Va >= 0
+		if (Vb < 0) {
+			if ((Vb + sqrt3Va) < DELTA) {
+				sector = 5;
+				ta = -Y;
+				tb = -Z;
+			} else {
+				sector = 6; // -x, y
+				ta = -X;
+				tb = Y;
+			}
+		} else { // Vb >= 0
+
+			if ((Vb - sqrt3Va) < DELTA) {
+				sector = 1;	// -z,x
+				ta = -Z;
+				tb = X;
+			} else {
+				sector = 2;	// y,z
+				ta = Y;
+				tb = Z;
+			}
+		}
+	}
+
+	output->sector = sector;
+
+	if (sector == 0 || sector != output->sector_soll) {
+		return SVPWM_SECTOR_ERROR;   	// Invalid sector, return error
+	}
+
+	ta = ta *T_VAL;
+	tb = tb *T_VAL; // Scale ta and tb to timer counts
+
+
+	ChA = (uint32_t) ((T_VAL - ta - tb) * 0.5f) ;	//taon= (1-ta-tb)/2
+	ChB = ChA + ta; 			//tbon=taon+ta
+	ChC = ChB + tb; 			// tcon= on+tb
+
+	// Output results to array
+	output->ChA = ChA;
+	output->ChB = ChB;
+	output->ChC = ChC;
+
+	TIM1->CCR1 = (uint32_t) ChA;
+	TIM1->CCR2 = (uint32_t) ChB;
+	TIM1->CCR3 = (uint32_t) ChC;
+
+	return 0; // No error
+}
+

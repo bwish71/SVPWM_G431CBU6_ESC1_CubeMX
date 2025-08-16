@@ -1,0 +1,50 @@
+/*
+ * encoder.c
+ *
+ *  Created on: May 18, 2025
+ *      Author: acweiss
+ */
+
+// read the quadrature encoder. Use TIM2 using tim_ti1 and tim_ti2 edges
+// Input is on PA0 and PA1
+
+
+#include "encoder.h"
+#include "main.h"
+
+// Init function for the encoder
+void Encoder_Init(void) {
+
+	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN; // Enable clock for TIM2
+
+	// Reset timer
+	TIM2->CR1 = 0;
+	TIM2->CNT = 0;
+
+	// Configure input capture on CH1 and CH2
+	TIM2->CCMR1 =
+	    (1 << TIM_CCMR1_CC1S_Pos) | // CC1S = 01: CC1 is mapped to TI1
+	    (1 << TIM_CCMR1_CC2S_Pos);  // CC2S = 01: CC2 is mapped to TI2
+
+	// No filtering, no prescaler (ICxF = 0, ICxPSC = 0)
+
+	// Set both channels to capture on both edges
+	TIM2->CCER =
+	    TIM_CCER_CC1E | TIM_CCER_CC2E | // Enable capture
+	    TIM_CCER_CC1P | TIM_CCER_CC1NP | // Capture both rising and falling (both bits set)
+	    TIM_CCER_CC2P | TIM_CCER_CC2NP;
+
+	// Encoder mode 3 (TI1 and TI2, count on both edges)
+	TIM2->SMCR = (3 << TIM_SMCR_SMS_Pos);
+
+	// Auto-reload to max
+	TIM2->ARR = 0xFFFF;
+
+	// Enable counter
+	TIM2->CR1 |= TIM_CR1_CEN;
+
+
+
+}
+
+
