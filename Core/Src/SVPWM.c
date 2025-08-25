@@ -97,7 +97,7 @@ int svpwm_calculate(SvpwmData* data) {
     }
 
 
-    // Calculate T0 and check for overmodulation. Overmudulation can also happen if VBus is lower than expected.
+    // Calculate T0 and check for overmodulation. Overmodulation can also happen if VBus is lower than expected.
     // ToDo: Better Scale than or return error that VBus is too low?
     T0 = T_VAL - T1 - T2;
     if (T0 < 0.0f || T1 < 0.0f || T2 < 0.0f) { // Check if any time is negative (indicates overmodulation or calculation issue)
