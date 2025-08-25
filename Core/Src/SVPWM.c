@@ -24,6 +24,7 @@
 #include "util.h" // Include ASW util header file
 #include <math.h> // Include math library for cos() and sin()
 #include "debug.h" // Include ASW debug header file
+#include <assert.h>
 
 
 
@@ -94,6 +95,9 @@ int svpwm_calculate(SvpwmData* data) {
         T1 = (T_VAL / VBus) * (-Sqrt3Vb);
         T2 = (T_VAL / (2.0f * VBus)) * (3.0f * Va + Sqrt3Vb);
         break;
+    default:
+        assert(false);
+        break;
     }
 
 
@@ -144,6 +148,9 @@ int svpwm_calculate(SvpwmData* data) {
         ChA = T0 * 0.5f;
         ChC = ChA + T2;
         ChB = ChC + T1;
+        break;
+    default:
+        assert(false);
         break;
     }
 
