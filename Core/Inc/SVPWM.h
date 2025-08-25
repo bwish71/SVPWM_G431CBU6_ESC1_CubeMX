@@ -15,6 +15,7 @@
 
 typedef struct SvpwmData{
 	float VBus; // DC bus voltage
+    float m;   // Modulation index (max 0.57735f for 1/sqrt(3))
     int sector;     // Sector number (1..6)
     int sector_soll; // Expected sector number (1..6)
     float grad;	  // Angle in degrees

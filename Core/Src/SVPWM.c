@@ -30,6 +30,7 @@
 int svpwm_calculate(SvpwmData* data) {
     float T0, T1, T2;
     float ChA, ChB, ChC;
+
 //    float sqrt3Va = round_to(SQRT3 * data->Va, 5); // Precompute for efficiency
 //    float Sqrt3Vb = round_to(SQRT3 * data->Vb, 5);
     float sqrt3Va = (SQRT3 * data->Va); // Precompute for efficiency
@@ -41,6 +42,7 @@ int svpwm_calculate(SvpwmData* data) {
 //    float Vb = round_to(data->Vb, 5); // Round to 5 decimal places
     float Va = data->Va; // Round to 5 decimal places
     float Vb = data->Vb; // Round to 5 decimal places
+
 
     if (Va < 0.0f) {
         if (Vb > 0.0f) {
@@ -56,13 +58,13 @@ int svpwm_calculate(SvpwmData* data) {
         }
     }
 
+
     data->sector_soll = ((int)data->grad / 60) + 1; // Calculate the expected sector based on the angle
-    if (data->sector != data->sector_soll) {
-    	printf("Error: Sector %d does not match expected sector %d for grad %f\r\n",
-			   data->sector, data->sector_soll, data->grad);
-    	while(1); // Stop execution if sector does not match expected sector
-        //return SVPWM_SECTOR_ERROR;   	// Invalid sector, return error
-    }
+//    if (data->sector != data->sector_soll) {
+//    	printf("Error: Sector %d does not match expected sector %d for grad %f\r\n",
+//			   data->sector, data->sector_soll, data->grad);
+//    	while(1); // Stop execution if sector does not match expected sector
+//    }
 
     // Compute switching times based on sector
     // Todo: precalculate T_Val / VBus
@@ -147,7 +149,6 @@ int svpwm_calculate(SvpwmData* data) {
         break;
     }
 
-
     // Output results
     data->ChA = (int)ChA;
     data->ChB = (int)ChB;
@@ -157,6 +158,12 @@ int svpwm_calculate(SvpwmData* data) {
     TIM1->CCR1 = (uint32_t) ChA;
     TIM1->CCR2 = (uint32_t) ChB;
     TIM1->CCR3 = (uint32_t) ChC;
+
+    // Debug:
+//    TIM1->CCR1 = (uint32_t) 2000;
+//    TIM1->CCR2 = (uint32_t) 2000;
+//    TIM1->CCR3 = (uint32_t) 2000;
+
 
     return 0; // No error
 }

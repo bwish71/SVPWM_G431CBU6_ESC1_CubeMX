@@ -1,0 +1,47 @@
+#include "encoder.h"
+
+// Private module state
+static volatile int32_t enc_hi32 = 0; // high 16-bit extension
+
+// Local critical section helpers
+static inline uint32_t enc_crit_enter(void) {
+    uint32_t p = __get_PRIMASK();
+    __disable_irq();
+    return p;
+}
+static inline void enc_crit_exit(uint32_t p) { __set_PRIMASK(p); }
+
+void encoder_init(TIM_HandleTypeDef *htim) {
+    HAL_TIM_Encoder_Start(htim, TIM_CHANNEL_ALL);
+    __HAL_TIM_CLEAR_FLAG(htim, TIM_FLAG_UPDATE);
+    __HAL_TIM_ENABLE_IT(htim, TIM_IT_UPDATE); // enable update IRQ for wrap tracking
+}
+
+void encoder_irq_on_update(TIM_HandleTypeDef *htim) {
+    uint32_t sr = htim->Instance->SR;
+    if (sr & TIM_SR_UIF) {
+        if (htim->Instance->CR1 & TIM_CR1_DIR) {
+            enc_hi32 -= 65536; // down-count wrap
+        } else {
+            enc_hi32 += 65536; // up-count wrap
+        }
+        // UIF is cleared by HAL_TIM_IRQHandler which is called after this hook.
+    }
+}
+
+int32_t encoder_pos_counts(void) {
+    uint32_t pm = enc_crit_enter();
+    extern TIM_HandleTypeDef htim4; // declared in tim.c
+    int32_t pos = enc_hi32 + (int16_t)__HAL_TIM_GET_COUNTER(&htim4);
+    enc_crit_exit(pm);
+    return pos;
+}
+
+int32_t encoder_revs(void) {
+    return encoder_pos_counts() / ENCODER_COUNTS_PER_REV; // FIX: previously returned only enc_hi32
+}
+
+int32_t encoder_inrev(void) {
+    int32_t p = encoder_pos_counts();
+    return p - (p / ENCODER_COUNTS_PER_REV) * ENCODER_COUNTS_PER_REV;
+}

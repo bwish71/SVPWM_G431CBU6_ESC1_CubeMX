@@ -42,11 +42,19 @@ extern "C" {
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
 
+#define WEACT_BOARD		1  		// Set to 1 for WeAct board
+//#define ESC_BOARD		1		// Set to 1 for ESC board
+
 #define PWM_FREQ            20000      // 20 kHz
 #define COUNTER_MAX_FREQ    170000000  // 170 MHz
-#define T_VAL               (COUNTER_MAX_FREQ / PWM_FREQ / 2)  // make sure is is an even number: Todo Check
+#define T_VAL   			((uint16_t)(((COUNTER_MAX_FREQ / PWM_FREQ) / 2) & ~1U))	// & ~1U makes sure it is an even number
 #define Vbus                10.0         // DC bus voltage (V)
 #define SQRT3             	(float)1.7320508075688772 // Square root of 3
+
+
+#define ENCODER_CPR 		1024
+#define COUNTS_PER_REV 		(ENCODER_CPR)
+
 
 extern UART_HandleTypeDef huart2;	// UART handle
 

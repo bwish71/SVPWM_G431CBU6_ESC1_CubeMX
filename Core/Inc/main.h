@@ -51,6 +51,11 @@ extern "C" {
 #define Vbus                10.0         // DC bus voltage (V)
 #define SQRT3             	(float)1.7320508075688772 // Square root of 3
 
+
+#define ENCODER_CPR 		1024
+#define COUNTS_PER_REV 		(ENCODER_CPR)
+
+
 extern UART_HandleTypeDef huart2;	// UART handle
 
 /* USER CODE END EC */

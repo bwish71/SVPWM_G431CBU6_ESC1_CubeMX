@@ -3,135 +3,123 @@
 
 void GPIO_Init(void) {
 	// Enable clock
-	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN        // Enable GPIOA
-	| RCC_AHB2ENR_GPIOBEN        // Enable GPIOB
-			| RCC_AHB2ENR_GPIOCEN;       // Enable GPIOC
+	RCC->AHB2ENR	|= RCC_AHB2ENR_GPIOAEN        // Enable GPIOA
+					| RCC_AHB2ENR_GPIOBEN        // Enable GPIOB
+					| RCC_AHB2ENR_GPIOCEN;       // Enable GPIOC
 
-#ifdef ESC_BOARD
-	// Configure PC6 as output for the LED
-	// Clear mode bits for PC6
-	GPIOC->MODER &= ~(GPIO_MODER_MODE6);
-	// Set PC6 to General purpose output mode (01)
-	GPIOC->MODER |= GPIO_MODER_MODE6_0;
+	// LED (both boards use PC6 here)
+	GPIOC->MODER &= ~(GPIO_MODER_MODE6);          // Clear mode bits for PC6
+	GPIOC->MODER |= GPIO_MODER_MODE6_0;           // PC6: General purpose output mode (01)
 
-	// GPIO Setting for Compare Outputs of TIM1
-	// Function | Pin | Port | Notes
-	// PWM_U_H | PA8 | A | TIM1_CH1	| AF6
-	// PWM_U_L | PC13 | C | TIM1_CH1N | AF4
-	// PWM_V_H | PA9 | A | TIM1_CH2 	| AF6
-	// PWM_V_L | PA12 | A | TIM1_CH2N | AF6
-	// PWM_W_H | PA10 | A | TIM1_CH3 	| AF6
-	// PWM_W_L | PB15 | B | TIM1_CH3N | AF4
+	// TIM1 PWM Outputs (common)
+	// Function | Pin  | Port | Notes
+	// PWM_U_H  | PA8  |  A   | TIM1_CH1  | AF6
+	// PWM_V_H  | PA9  |  A   | TIM1_CH2  | AF6
+	// PWM_W_H  | PA10 |  A   | TIM1_CH3  | AF6
+	// PWM_W_L  | PB15 |  B   | TIM1_CH3N | AF4
+	// PWM_U_L  | PC13 |  C   | TIM1_CH1N | AF4
+	// PWM_V_L  | PA12 (ESC) | A | TIM1_CH2N | AF6
+	//          | PB14 (WeAct)| B | TIM1_CH2N | AF6
 
-	// Set all used GPIOs
+	// Clear PA8, PA9, PA10, PA12, PB14, PB15, PC13 (startup default is 0x11 = analog Input)
+	GPIOA->MODER &= ~(GPIO_MODER_MODE8 | GPIO_MODER_MODE9 | GPIO_MODER_MODE10 | GPIO_MODER_MODE12);
+	GPIOB->MODER &= ~(GPIO_MODER_MODE14 | GPIO_MODER_MODE15);
+	GPIOC->MODER &= ~(GPIO_MODER_MODE13);
 
-	// PA8, PA9, PA10, PA12
-	GPIOA->MODER &= ~(GPIO_MODER_MODE8 | GPIO_MODER_MODE9 |
-			GPIO_MODER_MODE10 | GPIO_MODER_MODE12);// Clear mode bits
-	GPIOA->MODER |= (GPIO_MODER_MODE8_1 | GPIO_MODER_MODE9_1 |
-			GPIO_MODER_MODE10_1 | GPIO_MODER_MODE12_1);// AF mode
+	// PA8, PA9, PA10 to AF6
+	GPIOA->MODER &= ~(GPIO_MODER_MODE8 | GPIO_MODER_MODE9 | GPIO_MODER_MODE10);
+	GPIOA->MODER |= (GPIO_MODER_MODE8_1 | GPIO_MODER_MODE9_1 | GPIO_MODER_MODE10_1);
+	GPIOA->AFR[1] |= (6 << GPIO_AFRH_AFSEL8_Pos)   // PA8  = AF6 (CH1)
+	              | (6 << GPIO_AFRH_AFSEL9_Pos)   // PA9  = AF6 (CH2)
+	              | (6 << GPIO_AFRH_AFSEL10_Pos); // PA10 = AF6 (CH3)
 
-	GPIOA->AFR[1] |= (6 << GPIO_AFRH_AFSEL8_Pos)// PA8  = AF6 (CH1)
-	| (6 << GPIO_AFRH_AFSEL9_Pos)// PA9  = AF6 (CH2)
-	| (6 << GPIO_AFRH_AFSEL10_Pos)// PA10 = AF6 (CH3)
-	| (6 << GPIO_AFRH_AFSEL12_Pos);// PA12 = AF6 (CH2N)
+	// PB15 to AF4 (TIM1_CH3N)
+	GPIOB->MODER &= ~(GPIO_MODER_MODE15);
+	GPIOB->MODER |=  (GPIO_MODER_MODE15_1);
+	GPIOB->AFR[1] |= (4 << GPIO_AFRH_AFSEL15_Pos); // PB15 = AF4 (CH3N)
 
-	// PB15
-	GPIOB->MODER &= ~(GPIO_MODER_MODE15);// Clear mode bits
-	GPIOB->MODER |= (GPIO_MODER_MODE15_1);// AF mode
+	// PC13 to AF4 (TIM1_CH1N)
+	GPIOC->MODER &= ~(GPIO_MODER_MODE13);
+	GPIOC->MODER |=  (GPIO_MODER_MODE13_1);
+	GPIOC->AFR[1] |= (4 << GPIO_AFRH_AFSEL13_Pos); // PC13 = AF4 (CH1N)
 
-	GPIOB->AFR[1] |= (4<< GPIO_AFRH_AFSEL15_Pos);// PB15 = AF4 (CH3N)
-
-	// PC13
-	GPIOC->MODER &= ~(GPIO_MODER_MODE13);// Clear mode bits
-	GPIOC->MODER |= (GPIO_MODER_MODE13_1);// AF mode
-
-	GPIOC->AFR[1] |= (4 << GPIO_AFRH_AFSEL13_Pos);// PC13 = AF4 (CH1N)
+	// TIM1_CH2N differs by board
+#ifdef WEACT_BOARD
+	// PB14 -> TIM1_CH2N (AF6)
+	GPIOB->MODER &= ~(GPIO_MODER_MODE14);
+	GPIOB->MODER |=  (GPIO_MODER_MODE14_1);
+	GPIOB->AFR[1] |= (6 << GPIO_AFRH_AFSEL14_Pos); // PB14 = AF6 (CH2N)
+#else
+	// PA12 -> TIM1_CH2N (AF6) for ESC board
+	GPIOA->MODER &= ~(GPIO_MODER_MODE12);
+	GPIOA->MODER |=  (GPIO_MODER_MODE12_1);
+	GPIOA->AFR[1] |= (6 << GPIO_AFRH_AFSEL12_Pos); // PA12 = AF6 (CH2N)
+#endif
 
 	// Set speed to high (to reduce rise/fall time)
-	GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED8 | GPIO_OSPEEDR_OSPEED9 |
-	GPIO_OSPEEDR_OSPEED10 | GPIO_OSPEEDR_OSPEED12;
+	GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED8 | GPIO_OSPEEDR_OSPEED9 | GPIO_OSPEEDR_OSPEED10;
 	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED15;
 	GPIOC->OSPEEDR |= GPIO_OSPEEDR_OSPEED13;
+#ifdef WEACT_BOARD
+	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED14;
+#else
+	GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED12;
+#endif
 
-	// Optional: push-pull, no pull-up/down
-	GPIOA->OTYPER &= ~(GPIO_OTYPER_OT8 | GPIO_OTYPER_OT9 |
-			GPIO_OTYPER_OT10 | GPIO_OTYPER_OT12);// Push-pull
-	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPD8 | GPIO_PUPDR_PUPD9 |
-			GPIO_PUPDR_PUPD10 | GPIO_PUPDR_PUPD12);// No pull-up/down
+	// Push-pull, no pull-up/down
+	GPIOA->OTYPER &= ~(GPIO_OTYPER_OT8 | GPIO_OTYPER_OT9 | GPIO_OTYPER_OT10);
+	GPIOA->PUPDR  &= ~(GPIO_PUPDR_PUPD8 | GPIO_PUPDR_PUPD9 | GPIO_PUPDR_PUPD10);
+	GPIOB->OTYPER &= ~(GPIO_OTYPER_OT15);
+	GPIOB->PUPDR  &= ~(GPIO_PUPDR_PUPD15);
+	GPIOC->OTYPER &= ~(GPIO_OTYPER_OT13);
+	GPIOC->PUPDR  &= ~(GPIO_PUPDR_PUPD13);
+#ifdef WEACT_BOARD
+	GPIOB->OTYPER &= ~(GPIO_OTYPER_OT14);
+	GPIOB->PUPDR  &= ~(GPIO_PUPDR_PUPD14);
+#else
+	GPIOA->OTYPER &= ~(GPIO_OTYPER_OT12);
+	GPIOA->PUPDR  &= ~(GPIO_PUPDR_PUPD12);
+#endif
 
-	GPIOB->OTYPER &= ~(GPIO_OTYPER_OT15);// Push-pull
-	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPD15);// No pull-up/down
+	// Potentiometer input on PB12 (Analog)
+	GPIOB->MODER   &= ~(GPIO_MODER_MODE12);
+	GPIOB->MODER   |=  GPIO_MODER_MODE12_0;     // Analog mode
+	GPIOB->PUPDR   &= ~(GPIO_PUPDR_PUPD12);     // No pull-up/down
+	GPIOB->OSPEEDR &= ~(GPIO_OSPEEDR_OSPEED12); // Low speed
 
-	GPIOC->OTYPER &= ~(GPIO_OTYPER_OT13);// Push-pull
-	GPIOC->PUPDR &= ~(GPIO_PUPDR_PUPD13);// No pull-up/down
-
-	// configure switch as input on PC10 for ESC Board or PC13 for WeAct Board
-	GPIOC->MODER &= ~(GPIO_MODER_MODE13);// Clear mode bits
-	// Enable pull-down resistor
-	GPIOC->PUPDR &= ~(GPIO_PUPDR_PUPD13);// No pull-up/down
-	GPIOC->PUPDR |= GPIO_PUPDR_PUPD13_1;// Pull-down
-
-	// Configure the potentiometer input on PB12 (0 to 3.3V)
-	GPIOB->MODER &= ~(GPIO_MODER_MODE12); // Clear mode bits
-	GPIOB->MODER |= GPIO_MODER_MODE12_0; // Set PB12 to Analog mode (00)
-	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPD12); // No pull-up/down
-	GPIOB->OSPEEDR &= ~(GPIO_OSPEEDR_OSPEED12); // Set speed to low (to reduce power consumption)
-
-
-#elif defined(WEACT_BOARD)
-	// Configure PC6 as output for the LED
-	GPIOC->MODER &= ~(GPIO_MODER_MODE6);
-	GPIOC->MODER |= GPIO_MODER_MODE6_0; // Set PC6 to General purpose output mode (01)
-
-	/**TIM1 GPIO Configuration
-	 PC13     ------> TIM1_CH1N -> AF4
-	 PB14     ------> TIM1_CH2N -> AF6
-	 PB15     ------> TIM1_CH3N -> AF4
-	 PA8     ------> TIM1_CH1 -> AF6
-	 PA9     ------> TIM1_CH2 -> AF6
-	 PA10     ------> TIM1_CH3 -> AF6
-	 */
-
-	// Set all used GPIOs
-	GPIOA->MODER &= ~(GPIO_MODER_MODE8 | GPIO_MODER_MODE9 |
-	GPIO_MODER_MODE10); 	// Clear mode bits
-	GPIOA->MODER |= (GPIO_MODER_MODE8_1 | GPIO_MODER_MODE9_1 |
-	GPIO_MODER_MODE10_1); 	// AF mode
-	GPIOA->AFR[1] 	|= (6 << GPIO_AFRH_AFSEL8_Pos) 	// PA8  = AF6 (CH1)
-					| (6 << GPIO_AFRH_AFSEL9_Pos) 	// PA9  = AF6 (CH2)
-					| (6 << GPIO_AFRH_AFSEL10_Pos); 	// PA10 = AF6 (CH3)
-	GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED8 | GPIO_OSPEEDR_OSPEED9 |
-	GPIO_OSPEEDR_OSPEED10; // Set speed to high (to reduce rise/fall time)
-	GPIOA->OTYPER &= ~(GPIO_OTYPER_OT8 | GPIO_OTYPER_OT9 |
-	GPIO_OTYPER_OT10); // Push-pull
-	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPD8 | GPIO_PUPDR_PUPD9 |
-	GPIO_PUPDR_PUPD10); // No pull-up/down
-
-	GPIOB->MODER &= ~(GPIO_MODER_MODE14 | GPIO_MODER_MODE15); // Clear mode bits
-	GPIOB->MODER |= (GPIO_MODER_MODE14_1 | GPIO_MODER_MODE15_1); // AF mode
-	GPIOB->AFR[1] 	|= (6 << GPIO_AFRH_AFSEL14_Pos) // PB14 = AF6 (CH2N)
-					| (4 << GPIO_AFRH_AFSEL15_Pos); // PB15 = AF4 (CH3N)
-	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED14 | GPIO_OSPEEDR_OSPEED15; // Set speed to high (to reduce rise/fall time)
-	GPIOB->OTYPER &= ~(GPIO_OTYPER_OT14 | GPIO_OTYPER_OT15); // Push-pull
-	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPD14 | GPIO_PUPDR_PUPD15); // No pull-up/down
-
-	GPIOC->MODER &= ~(GPIO_MODER_MODE13); // Clear mode bits
-	GPIOC->MODER |= (GPIO_MODER_MODE13_1); // AF mode
-	GPIOC->AFR[1] |= (4 << GPIO_AFRH_AFSEL13_Pos); // PC13 = AF4 (CH1N)
-	GPIOC->OSPEEDR |= GPIO_OSPEEDR_OSPEED13; // Set speed to high (to reduce rise/fall time)
-	GPIOC->OTYPER &= ~(GPIO_OTYPER_OT13); // Push-pull
-	GPIOC->PUPDR &= ~(GPIO_PUPDR_PUPD13); // No pull-up/down
-
-
-	// Configure PA0 and PA1 for encoder inputs
-	GPIOA->MODER &= ~(GPIO_MODER_MODE0 | GPIO_MODER_MODE1); // Set PA0 and PA1 as input
-	GPIOA->MODER |= (GPIO_MODER_MODE0_1 | GPIO_MODER_MODE1_1); // Set PA0 and PA1 to Alternate Function mode (MODER = 0b10)
-	GPIOA->AFR[0] |= (1 << GPIO_AFRL_AFSEL0_Pos) | (1 << GPIO_AFRL_AFSEL1_Pos); // Select AF1 for TIM2 on PA0 and PA1
-	GPIOA->PUPDR |= (GPIO_PUPDR_PUPD0_1 | GPIO_PUPDR_PUPD1_1); // Pull-down PA0 and PA1
-
-
+	// Encoder GPIOs
+#ifdef WEACT_BOARD
+	// WeAct board: TIM2 on PA0/PA1, optional index on PA2 (all AF1)
+	// ENC_A | PA0 | TIM2_CH1 | AF1
+	// ENC_B | PA1 | TIM2_CH2 | AF1
+	// ENC_Z | PA2 | TIM2_CH3 | AF1 (optional index)
+	GPIOA->MODER &= ~(GPIO_MODER_MODE0 | GPIO_MODER_MODE1 | GPIO_MODER_MODE2);
+	GPIOA->MODER |=  (GPIO_MODER_MODE0_1 | GPIO_MODER_MODE1_1 | GPIO_MODER_MODE2_1); // AF mode
+	// Clear then set AF1 for PA0/PA1/PA2
+	GPIOA->AFR[0] &= ~((0xFu << GPIO_AFRL_AFSEL0_Pos) | (0xFu << GPIO_AFRL_AFSEL1_Pos) | (0xFu << GPIO_AFRL_AFSEL2_Pos));
+	GPIOA->AFR[0] |=  (1u << GPIO_AFRL_AFSEL0_Pos) | (1u << GPIO_AFRL_AFSEL1_Pos) | (1u << GPIO_AFRL_AFSEL2_Pos);
+	// Electrical config
+	GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED0 | GPIO_OSPEEDR_OSPEED1 | GPIO_OSPEEDR_OSPEED2;
+	GPIOA->OTYPER  &= ~(GPIO_OTYPER_OT0 | GPIO_OTYPER_OT1 | GPIO_OTYPER_OT2); // Push-pull
+	GPIOA->PUPDR   &= ~(GPIO_PUPDR_PUPD0 | GPIO_PUPDR_PUPD1 | GPIO_PUPDR_PUPD2);
+	// Adjust pulls as needed for your encoder; default none
+#else
+	// ESC board: TIM4 on PB6/PB7, optional index on PB8 (all AF2)
+	// ENC_A | PB6 | TIM4_CH1 | AF2
+	// ENC_B | PB7 | TIM4_CH2 | AF2
+	// ENC_Z | PB8 | TIM4_CH3 | AF2 (optional index)
+	GPIOB->MODER &= ~(GPIO_MODER_MODE6 | GPIO_MODER_MODE7 | GPIO_MODER_MODE8);
+	GPIOB->MODER |=  (GPIO_MODER_MODE6_1 | GPIO_MODER_MODE7_1 | GPIO_MODER_MODE8_1); // AF mode
+	// Clear then set AF2 for PB6/PB7/PB8
+	GPIOB->AFR[0] &= ~((0xFu << GPIO_AFRL_AFSEL6_Pos) | (0xFu << GPIO_AFRL_AFSEL7_Pos));
+	GPIOB->AFR[0] |=  (2u << GPIO_AFRL_AFSEL6_Pos) | (2u << GPIO_AFRL_AFSEL7_Pos);
+	GPIOB->AFR[1] &= ~(0xFu << GPIO_AFRH_AFSEL8_Pos);
+	GPIOB->AFR[1] |=  (2u << GPIO_AFRH_AFSEL8_Pos);
+	// Electrical config
+	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED6 | GPIO_OSPEEDR_OSPEED7 | GPIO_OSPEEDR_OSPEED8;
+	GPIOB->OTYPER  &= ~(GPIO_OTYPER_OT6 | GPIO_OTYPER_OT7 | GPIO_OTYPER_OT8); // Push-pull
+	GPIOB->PUPDR   &= ~(GPIO_PUPDR_PUPD6 | GPIO_PUPDR_PUPD7 | GPIO_PUPDR_PUPD8);
+	// Default none; add pull-ups/downs as needed
 #endif
 
 }
-

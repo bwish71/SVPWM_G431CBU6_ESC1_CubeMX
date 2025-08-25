@@ -14,5 +14,6 @@
 // function prototypes to print debug information and check pin states
 void print_debug_info(SvpwmData* data);
 
+void debug_toggle_pwm_outputs(void); // Toggle all PWM outputs for debugging indefinitely
 
 #endif /* INC_DEBUG_H_ */

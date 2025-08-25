@@ -13,7 +13,9 @@
 #define SVPWM_OVERMODULATION_ERROR 2
 #define SVPWM_PIN_STATE_ERROR 3
 
-typedef struct SVPWM_Output {
+typedef struct SvpwmData{
+	float VBus; // DC bus voltage
+    float m;   // Modulation index (max 0.57735f for 1/sqrt(3))
     int sector;     // Sector number (1..6)
     int sector_soll; // Expected sector number (1..6)
     float grad;	  // Angle in degrees
@@ -26,10 +28,12 @@ typedef struct SVPWM_Output {
     int ChB;     // Duty cycle for channel B
     int ChC;     // Duty cycle for channel C
     int error;     // Error code (0 = no error, 1 = sector error, 2 = overmodulation)
-}  SVPWM_Output;
+} SvpwmData;
 
-int SVPWM(float, float, float, SVPWM_Output*);
-int SVPWM2(float, float, float, SVPWM_Output*);
+int svpwm_calculate(SvpwmData*);
+//int SVPWM2(float, float, float, SVPWM*);
+
+int run_svpwm_range(SvpwmData*, float, float, float);
 
 
 #endif /* INC_SVPWM_H_ */

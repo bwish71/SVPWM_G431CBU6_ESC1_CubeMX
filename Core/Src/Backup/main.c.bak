@@ -29,23 +29,20 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdio.h"
-#include "SVPWM.h"	// Include SVPWM header file
-#include <math.h>	// Include math library for cos() and sin()
-#include "GPIO_Init.h"	// Include ASW GPIO header file
-#include "TIM1_Init.h"	// Include ASW Timer header file
-#include "debug.h"	// Include ASW debug header file
-#include "util.h"	// Include ASW util header file
-#include "stdlib.h"	// Include ASW header file
-#include "usb_device.h"
-#include "usbd_cdc_if.h"
-
-
-
+#include "SVPWM.h" // Include SVPWM header file
+#include "util.h" // Include ASW util header file
+#include "debug.h" // Include ASW debug header file
+#include <string.h> // Include standard I/O library for printf
+#include <stdio.h> // Include standard I/O library for printf
+#ifdef WEACT_BOARD
+	#include "usbd_cdc_if.h" // Include USB CDC interface for printing to USB
+#endif
+#include "encoder.h" // Added: use encoder module API
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+extern TIM_HandleTypeDef htim4;
 
 /* USER CODE END PTD */
 
@@ -62,6 +59,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+//char textBuf[100];
+// Removed local encoder extension state (handled in encoder.c)
 
 /* USER CODE END PV */
 
@@ -74,10 +73,29 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+# ifdef WEACT_BOARD
+	void printText(char *text) {
+		while (CDC_Transmit_FS((uint8_t*) text, strlen(text)) == USBD_BUSY)
+			;
+	}
+
+	int _write(int file, char *ptr, int len) {
+		// Wait until the USB CDC is ready
+		while (CDC_Transmit_FS((uint8_t*)ptr, len) == USBD_BUSY) {;}
+		return len;
+	}
+# elif defined(ESC_BOARD)
+// For ESC board, we use UART2 for debugging
 void printText(char *text) {
-	while (CDC_Transmit_FS((uint8_t*) text, strlen(text)) == USBD_BUSY)
-		;
+	HAL_UART_Transmit(&huart2, (uint8_t*) text, strlen(text), HAL_MAX_DELAY);
 }
+int _write(int file, char *ptr, int len) {
+	// Wait until the UART is ready
+	HAL_UART_Transmit(&huart2, (uint8_t*) ptr, len, HAL_MAX_DELAY);
+	return len;
+}
+# endif
+
 
 /* USER CODE END 0 */
 
@@ -111,89 +129,66 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM1_Init();
   MX_USART2_UART_Init();
+  MX_TIM4_Init();
   MX_USB_Device_Init();
   /* USER CODE BEGIN 2 */
 
-	GPIO_Init(); // Initialize GPIOs
-	TIM1_Init(); // Initialize Timer 1
+	// Start the PWM outputs_
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+	// For complementary outputs, also:
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
 
-	int i = 0;
-	int err = 0; // Error variable
+	// Start the encoder (homes immediately if no index)
 
-	SVPWM_Output svpwm_output; // Declare the SVPWM output structure
-	SVPWM_Output svpwm_output2; // Declare the SVPWM output structure
+	// adc_init();
+	encoder_init(&htim4);
+
+
+	SvpwmData data; // Declare the SVPWM data structure
+	data.VBus = 10; // Set the DC bus voltage in the SVPWM data structure
+	data.m = 0.2f; // Set the modulation index (max 0.57735f for 1/sqrt(3))
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-	printf("Starting SVPWM...\r\n");
+	// generate a lookup table for sin values
+	float sinTable[SINE_TABLE_SIZE];
+	generate_sine_table(sinTable);
+
+	float grad = 0.0f; // running electrical angle in degrees
+
 	while (1) {
-		// drehe den Motor
-		for (float grad = 0; grad < 360; grad += 5) {
+		// Test only
+		for (;;) {
+		int32_t pos = encoder_pos_counts();
+		int32_t rev = encoder_revs();
+		int32_t fine = encoder_inrev();
+//		printf("HAL Reading: %ld\r\n", (long)__HAL_TIM_GET_COUNTER(&htim4));
 
-			printText("---\r\n");
+		printf("HAL Reading: %ld, Multi Turn Pos: %ld, Revolutions: %ld, Fine: %ld\r\n", (long)__HAL_TIM_GET_COUNTER(&htim4),(long)pos, (long)rev, (long)fine);
+	}
 
-//	grad = 29.9;
-			// wait until key is not pressed
-//			while (GPIOC->IDR & GPIO_IDR_ID13) {
-//				// do nothing
-//			}
-//			// wait for Key press on PC10
-//			int bounce = 0;
-//			do {
-//				if (GPIOC->IDR & GPIO_IDR_ID13) {
-//					bounce = 0; // Reset bounce counter if switch is not pressed
-//				} else {
-//					bounce++;
-//				}
-//			} while (bounce < 1000000);
-			// toggle the LED on PC6
-			GPIOC->ODR ^= (1 << 6); // Toggle PC6
+		// Advance angle
+		grad += 0.01f;
+		if (grad >= 360.0f)
+			grad -= 360.0f;
 
+		data.Vb = lookup_sin_interp(sinTable, grad) * data.m * data.VBus;
+		data.Va = lookup_cos_interp(sinTable, grad) * data.m * data.VBus;
+		svpwm_calculate(&data);
 
-			svpwm_output.grad = grad; // Store the current angle in the output structure
-			svpwm_output.sector_soll = (int)(grad / 60.0) + 1; // Calculate the expected sector based on the angle
-
-			// Convert degrees to radians
-			float rad = grad * (M_PI / 180.0);
-			// Calculate alpha and beta components
-			float Va = (cosf(rad)) * 0.57735 * Vbus; // Scale by 0.4 for modulation index
-			float Vb = (sinf(rad)) * 0.57735 * Vbus; // Scale by 0.4 for modulation index
-			svpwm_output.Va = Va; // Store the calculated Va in the output structure
-			svpwm_output.Vb = Vb; // Store the calculated Vb in the output structure
-
-			// for 2. Algo
-			svpwm_output2.grad = grad; // Store the current angle in the output structure
-			svpwm_output2.sector_soll = (int)(grad / 60.0) + 1; // Calculate the expected sector based on the angle
-			svpwm_output2.Va = Va; // Store the calculated Va in the output structure
-			svpwm_output2.Vb = Vb; // Store the calculated Vb in the output structure
-
-
-
-			// Call SVPWM function
-			// struct SVPWM_Output svpwm_output; // Declaration moved outside the loop
-			i++;
-			SVPWM(Va, Vb, Vbus, &svpwm_output);
-			printf("1: ChA: %d ChB: %d ChC: %d", svpwm_output.ChA, svpwm_output.ChB, svpwm_output.ChC);
-
-			if ((err = SVPWM(Va, Vb, Vbus, &svpwm_output2))) {
-				// error occured
-				if (err == SVPWM_SECTOR_ERROR) {
-					printf("Sector error in round: %i \r\n", i);
-				} else if (err == SVPWM_OVERMODULATION_ERROR) {
-					printf("Overmodulation error in round: %i \r\n", i);
-				}
-				print_debug_info(svpwm_output, i);
-				while (1)
-					;
-			}
-
-		}
+		// Toggle Red LED on PC6
+		GPIOC->ODR ^= (1 << 6);
+	}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	}
   /* USER CODE END 3 */
 }
 
@@ -260,8 +255,7 @@ void Error_Handler(void)
 	}
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

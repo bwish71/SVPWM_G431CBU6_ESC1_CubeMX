@@ -101,7 +101,7 @@
   */
 
 static void Get_SerialNum(void);
-//static void IntToUnicode(uint32_t value, uint8_t * pbuf, uint8_t len);
+static void IntToUnicode(uint32_t value, uint8_t * pbuf, uint8_t len);
 
 /**
   * @}
@@ -338,7 +338,6 @@ uint8_t * USBD_CDC_InterfaceStrDescriptor(USBD_SpeedTypeDef speed, uint16_t *len
   */
 static void Get_SerialNum(void)
 {
-
 /*
   uint32_t deviceserial0;
   uint32_t deviceserial1;
@@ -356,19 +355,18 @@ static void Get_SerialNum(void)
     IntToUnicode(deviceserial1, &USBD_StringSerial[18], 4);
   }
 */
-
-  /* USER CODE END Get_SerialNum */
+  // USER CODE BEGIN Get_SerialNum */
 
   // ASW
-
   const char *custom_serial = "MYSTM32G431";
-      // Fill USBD_StringSerial[2..] with Unicode (UTF-16LE) version of custom_serial
-      for (int i = 0; i < 10; ++i) {
-          USBD_StringSerial[2 + i * 2] = custom_serial[i];
-          USBD_StringSerial[3 + i * 2] = 0;
-      }
+        // Fill USBD_StringSerial[2..] with Unicode (UTF-16LE) version of custom_serial
+        for (int i = 0; i < 10; ++i) {
+            USBD_StringSerial[2 + i * 2] = custom_serial[i];
+            USBD_StringSerial[3 + i * 2] = 0;
+        }
 
-      // USER CODE END Get_SerialNum */
+  // USER CODE END Get_SerialNum */
+
 }
 
 /**
@@ -378,8 +376,6 @@ static void Get_SerialNum(void)
   * @param  len: buffer length
   * @retval None
   */
-
-/*
 static void IntToUnicode(uint32_t value, uint8_t * pbuf, uint8_t len)
 {
   uint8_t idx = 0;
@@ -400,8 +396,6 @@ static void IntToUnicode(uint32_t value, uint8_t * pbuf, uint8_t len)
     pbuf[2 * idx + 1] = 0;
   }
 }
-*/
-
 /**
   * @}
   */

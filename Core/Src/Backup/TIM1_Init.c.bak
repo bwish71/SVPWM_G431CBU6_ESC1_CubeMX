@@ -38,25 +38,18 @@ void TIM1_Init(void) {
    // TIM1->CCMR1 |= (0x7 << TIM_CCMR1_OC1M_Pos);  // PWM mode 2 (use 0x7 for PWM2)
 
     // Configure a very small dead time
-//    TIM1->BDTR |= TIM_BDTR_MOE; // Enable main output
- //   TIM1->BDTR &= ~TIM_BDTR_DTG; // Clear the DTG field
    // TIM1->BDTR |= (0x01 << TIM_BDTR_DTG_Pos); // Set a small dead time (e.g., 1 clock cycle)
-
-
     // Dead-time configuration (~100ns @ 170MHz = ~17 )
-//   TIM1->BDTR |= (17 & 0x7F);  // No scaling needed, bits 7:5 = 000
-    TIM1->BDTR |= TIM_BDTR_MOE;               // Main Output Enable
+    // TIM1->BDTR |= (17 & 0x7F);  // No scaling needed, bits 7:5 = 000
+
+    TIM1->BDTR |= TIM_BDTR_MOE;   	// Main Output Enable of the timer output
 
     // Disable dead time
-  //  TIM1->BDTR &= ~TIM_BDTR_DTG; // Clear the DTG field (no dead time)
-
-
-
-    //  TIM1->BDTR |= TIM_BDTR_OSSI | TIM_BDTR_OSSR; // Off-State Selection
+    TIM1->BDTR &= ~TIM_BDTR_DTG; 	// Clear the DTG field (no dead time)
 
     // Activate PWM outputs (channels 1,2,3 and complementary channels)
     TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC2E |TIM_CCER_CC3E;
-//    TIM1->CCER |= TIM_CCER_CC1NE | TIM_CCER_CC2NE | TIM_CCER_CC3NE; // Enable complementary outputs
+    TIM1->CCER |= TIM_CCER_CC1NE | TIM_CCER_CC2NE | TIM_CCER_CC3NE; // Enable complementary outputs
 
     // Start the timer
     TIM1->CR1 |= TIM_CR1_CEN;

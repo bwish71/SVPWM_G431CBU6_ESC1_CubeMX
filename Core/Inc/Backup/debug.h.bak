@@ -9,55 +9,11 @@
 #define INC_DEBUG_H_
 
 #include <stdbool.h>
+#include "SVPWM.h" // for SvpwmData and error codes
 
+// function prototypes to print debug information and check pin states
+void print_debug_info(SvpwmData* data);
 
-
-
-// function to print debug information
-void print_debug_info(SVPWM_Output output, int i) {
-//	printf("Error Nr: %d \r\n", output.error);
-	printf("Grad: %g \r\n", output.grad);
-	printf("Va: %g Vb: %g \r\n", output.Va, output.Vb);
-	printf("Soll Sektor:Ist Sektor  %d : %d \r\n", output.sector_soll, output.sector);
-	printf("T0: %g T1: %g T2: %g\r\n", output.T0, output.T1, output.T2);
-//	printf("ChA: %d \r\n", output.ChA);
-//	printf("ChB: %d \r\n", output.ChB);
-//	printf("ChC: %d \r\n", output.ChC);
-//	printf("OC1: %d \r\n", (int) TIM1->CCR1); 	//  read values from OC registers
-//	printf("OC2: %d \r\n", (int) TIM1->CCR2);
-//	printf("OC3: %d \r\n", (int) TIM1->CCR3);
-//	printf("Deadtime: %d \r\n", (int) TIM1->BDTR); // read values from Deadtime registers
-	printf("\r\n");
-
-}
-
-// GPIO Setting for Compare Outputs of TIM1
-// Function | Pin | Port | Notes
-// PWM_U_H | PA8 | A | TIM1_CH1
-// PWM_U_L | PC13 | C | TIM1_CH1N
-// PWM_V_H | PA9 | A | TIM1_CH2
-// PWM_V_L | PA12 | A | TIM1_CH2N
-// PWM_W_H | PA10 | A | TIM1_CH3
-// PWM_W_L | PB15 | B | TIM1_CH3N
-
-int check_pin_state() {
-
-	int ga = GPIOA->IDR; // read the whole GPIOA port register atomically without HAL
-	int gb = GPIOB->IDR; // read the whole GPIOA port register atomically without HAL
-	int gc = GPIOC->IDR; // read the whole GPIOC port register atomically without HAL
-
-	int ps1 = (ga & GPIO_PIN_8) >> 8 ;		// read pin PA8
-	int ps1N = (gc & GPIO_PIN_13) >> 13;	// read pin PC13
-	int ps2 = (ga & GPIO_PIN_9) >> 9;		// read pin PA
-	int ps2N = (ga & GPIO_PIN_12) >> 12;	// read pin PA12
-	int ps3 = (ga & GPIO_PIN_10) >> 10;	// read pin PA10
-	int ps3N = (gb & GPIO_PIN_15) >> 15;	// read pin PB15
-
-	if (ps1 == ps1N || ps2 == ps2N || ps3 == ps3N) {
-		printf("Pin states Error: %d %d | %d %d | %d %d \r\n", ps1, ps1N, ps2, ps2N, ps3, ps3N);
-		return SVPWM_PIN_STATE_ERROR;
-	}
-	return 0;
-}
+void debug_toggle_pwm_outputs(void); // Toggle all PWM outputs for debugging indefinitely
 
 #endif /* INC_DEBUG_H_ */

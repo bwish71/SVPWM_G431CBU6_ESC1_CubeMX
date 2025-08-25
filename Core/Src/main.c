@@ -29,24 +29,20 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdio.h"
-#include "SVPWM.h"
-#include <math.h>
-#include "GPIO_Init.h"
-#include "TIM1_Init.h"
-#include "debug.h"
-#include "util.h"
-#include "stdlib.h"
-#include "usb_device.h"
-#include "usbd_cdc_if.h"
-#include "encoder.h"
-#include "adc.h"
-#include <string.h>
-
+#include "SVPWM.h" // Include SVPWM header file
+#include "util.h" // Include ASW util header file
+#include "debug.h" // Include ASW debug header file
+#include <string.h> // Include standard I/O library for printf
+#include <stdio.h> // Include standard I/O library for printf
+#ifdef WEACT_BOARD
+#include "usbd_cdc_if.h" // Include USB CDC interface for printing to USB
+#endif
+#include "encoder.h" // Added: use encoder module API
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+extern TIM_HandleTypeDef htim4;
 
 /* USER CODE END PTD */
 
@@ -64,8 +60,7 @@
 
 /* USER CODE BEGIN PV */
 //char textBuf[100];
-
-
+// Removed local encoder extension state (handled in encoder.c)
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,162 +72,169 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+# ifdef WEACT_BOARD
 void printText(char *text) {
 	while (CDC_Transmit_FS((uint8_t*) text, strlen(text)) == USBD_BUSY)
 		;
 }
 
 int _write(int file, char *ptr, int len) {
-    // Wait until the USB CDC is ready
-    while (CDC_Transmit_FS((uint8_t*)ptr, len) == USBD_BUSY) {;}
-    return len;
+	// Wait until the USB CDC is ready
+	while (CDC_Transmit_FS((uint8_t*) ptr, len) == USBD_BUSY) {
+		;
+	}
+	return len;
 }
-
+# elif defined(ESC_BOARD)
+// For ESC board, we use UART2 for debugging
+void printText(char *text) {
+	HAL_UART_Transmit(&huart2, (uint8_t*) text, strlen(text), HAL_MAX_DELAY);
+}
+int _write(int file, char *ptr, int len) {
+	// Wait until the UART is ready
+	HAL_UART_Transmit(&huart2, (uint8_t*) ptr, len, HAL_MAX_DELAY);
+	return len;
+}
+# endif
 
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
-int main(void)
-{
+ * @brief  The application entry point.
+ * @retval int
+ */
+int main(void) {
 
-  /* USER CODE BEGIN 1 */
-  /* USER CODE END 1 */
+	/* USER CODE BEGIN 1 */
+	/* USER CODE END 1 */
 
-  /* MCU Configuration--------------------------------------------------------*/
+	/* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	HAL_Init();
 
-  /* USER CODE BEGIN Init */
+	/* USER CODE BEGIN Init */
 
-  /* USER CODE END Init */
+	/* USER CODE END Init */
 
-  /* Configure the system clock */
-  SystemClock_Config();
+	/* Configure the system clock */
+	SystemClock_Config();
 
-  /* USER CODE BEGIN SysInit */
+	/* USER CODE BEGIN SysInit */
 
-  /* USER CODE END SysInit */
+	/* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
-//  MX_GPIO_Init();
-//  MX_TIM1_Init();
-  MX_USART2_UART_Init();
-  MX_USB_Device_Init();
+	/* Initialize all configured peripherals */
+	MX_GPIO_Init();
+	MX_TIM1_Init();
+	MX_USART2_UART_Init();
+	MX_TIM4_Init();
+	MX_USB_Device_Init();
+	/* USER CODE BEGIN 2 */
 
-#ifdef ESC_BOARD
-	adc_init();
-#endif
+	// Start the PWM outputs_
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+	// For complementary outputs, also:
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
 
-  /* USER CODE BEGIN 2 */
+	// Start the encoder (homes immediately if no index)
 
-	GPIO_Init(); // Initialize GPIOs
-	TIM1_Init(); // Initialize Timer 1
-	Encoder_Init(); // Initialize Encoder
+	// adc_init();
+	encoder_init(&htim4);
 
 	SvpwmData data; // Declare the SVPWM data structure
 	data.VBus = 10; // Set the DC bus voltage in the SVPWM data structure
+	data.m = 0.2f; // Set the modulation index (max 0.57735f for 1/sqrt(3))
 
-	int i = 0;
+	/* USER CODE END 2 */
 
-  /* USER CODE END 2 */
+	/* Infinite loop */
+	/* USER CODE BEGIN WHILE */
 
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+	// generate a lookup table for sin values
+	float sinTable[SINE_TABLE_SIZE];
+	generate_sine_table(sinTable);
 
-	HAL_Delay(10000); // Wait for 1 second to ensure everything is initialized
-
-	printText("Starting SVPWM...\r\n");
-	run_svpwm_range(&data, 0.0f, 360.0f, 1.0f); // Run SVPWM for a full rotation from 0 to 360 degrees
-	run_svpwm_range(&data, 0.5f, 1.0f, 0.1f);
-	run_svpwm_range(&data, 59.5f, 60.5f, 0.1f);
+	float grad = 0.0f; // running electrical angle in degrees
 
 	while (1) {
-		GPIOC->ODR ^= (1 << 6); // Toggle PC6
-
-		// debug:
-		TIM1->CCR1 = 1000; // Set duty cycle for channel A (PA8)
-		TIM1->CCR2 = 1000; // Set duty cycle for channel B (PA9)
-		TIM1->CCR3 = 1000; // Set duty cycle for channel C (PA10)
-
-		printf("Start el. round %d \r\n", i++);
-		for (float grad = 0; grad < 360; grad += 0.01f) {
-			data.grad = grad;
-
-			// Convert degrees to radians
-			const float PI_F = 3.14159265358979323846f;
-			float rad = grad * (PI_F / 180.0f);
-			// Calculate alpha and beta components
-			data.Va = (cosf(rad)) * 0.57735f * data.VBus;
-			data.Vb = (sinf(rad)) * 0.57735f * data.VBus;
-
-			svpwm_calculate(&data);
-			if (data.sector != (int)(grad / 60 +1)) {
-				printf("Error: Sector %d does not match expected sector %d for grad %f\r\n",
-						data.sector, (int)(grad / 60) + 1, grad);
-				while(1);
+		// Test only
+		int32_t pos = 0;
+		int32_t pos_old = 0;
+		for (;;) {
+			pos = __HAL_TIM_GET_COUNTER(&htim4);
+			if (pos != pos_old) {
+				printf("HAL Reading: %ld, enc_hi32: %ld\r\n",
+						(long) __HAL_TIM_GET_COUNTER(&htim4),
+						(long) encoder_abs_count());
+				pos_old = pos;
 			}
 		}
 
-//		while(1) {;	// Stop with indicating by LED
-//			GPIOC->ODR ^= (1 << 6); // Toggle PC6
-//			HAL_Delay(1000); // Delay for 1 second
-//		}
+		// Advance angle
+		grad += 0.01f;
+		if (grad >= 360.0f)
+			grad -= 360.0f;
 
+		data.Vb = lookup_sin_interp(sinTable, grad) * data.m * data.VBus;
+		data.Va = lookup_cos_interp(sinTable, grad) * data.m * data.VBus;
+		svpwm_calculate(&data);
 
-    /* USER CODE END WHILE */
+		// Toggle Red LED on PC6
+		GPIOC->ODR ^= (1 << 6);
 	}
-    /* USER CODE BEGIN 3 */
-  /* USER CODE END 3 */
+	/* USER CODE END WHILE */
+
+	/* USER CODE BEGIN 3 */
+	/* USER CODE END 3 */
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
-void SystemClock_Config(void)
-{
-  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+ * @brief System Clock Configuration
+ * @retval None
+ */
+void SystemClock_Config(void) {
+	RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
+	RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
 
-  /** Configure the main internal regulator output voltage
-  */
-  HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1_BOOST);
+	/** Configure the main internal regulator output voltage
+	 */
+	HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1_BOOST);
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48|RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV2;
-  RCC_OscInitStruct.PLL.PLLN = 85;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
-  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
+	/** Initializes the RCC Oscillators according to the specified parameters
+	 * in the RCC_OscInitTypeDef structure.
+	 */
+	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48
+			| RCC_OSCILLATORTYPE_HSE;
+	RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+	RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
+	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+	RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV2;
+	RCC_OscInitStruct.PLL.PLLN = 85;
+	RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+	RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+	RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+		Error_Handler();
+	}
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+	/** Initializes the CPU, AHB and APB buses clocks
+	 */
+	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
+			| RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
-  {
-    Error_Handler();
-  }
+	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK) {
+		Error_Handler();
+	}
 }
 
 /* USER CODE BEGIN 4 */
@@ -240,20 +242,18 @@ void SystemClock_Config(void)
 /* USER CODE END 4 */
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
-void Error_Handler(void)
-{
-  /* USER CODE BEGIN Error_Handler_Debug */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
+void Error_Handler(void) {
+	/* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	__disable_irq();
 	while (1) {
 	}
-  /* USER CODE END Error_Handler_Debug */
+	/* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
