@@ -42,18 +42,18 @@ extern "C" {
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
 
-#define WEACT_BOARD		1  		// Set to 1 for WeAct board
-//#define ESC_BOARD		1		// Set to 1 for ESC board
+//#define WEACT_BOARD		1  		// Set to 1 for WeAct board
+#define ESC_BOARD		1		// Set to 1 for ESC board
 
 #define PWM_FREQ            20000      // 20 kHz
 #define COUNTER_MAX_FREQ    170000000  // 170 MHz
 #define T_VAL   			((uint16_t)(((COUNTER_MAX_FREQ / PWM_FREQ) / 2) & ~1U))	// & ~1U makes sure it is an even number
-#define Vbus                10.0         // DC bus voltage (V)
 #define SQRT3             	(float)1.7320508075688772 // Square root of 3
 
-
-#define ENCODER_CPR 		1024
-#define COUNTS_PER_REV 		(ENCODER_CPR)
+#define ENCODER_LINES 		1024		// Electrical cycles (A channel periods) per mechanical revolution
+// Hardware encoder mode (TIM_ENCODERMODE_TI12) counts one edge per channel (rising)
+// => x2 decoding (2 * LINES counts / mechanical rev). Both-edge (CCxNP=1 & CCxP=1) forbidden in encoder mode.
+#define ENCODER_COUNTS_PER_REV (2 * ENCODER_LINES)
 
 
 extern UART_HandleTypeDef huart2;	// UART handle

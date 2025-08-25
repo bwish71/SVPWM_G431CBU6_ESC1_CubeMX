@@ -8,18 +8,16 @@
 extern "C" {
 #endif
 
-#define ENCODER_CPR 1024
-// Hardware encoder mode (TIM_ENCODERMODE_TI12) on STM32G4 counts one edge per channel (rising)
-// => x2 decoding (2 * CPR counts / mechanical rev). Both-edge setting (CCxNP=1, CCxP=1) is forbidden
-// in encoder mode per reference manual, so do not use 4*CPR here.
-#define ENCODER_COUNTS_PER_REV (2 * ENCODER_CPR)
+
 
 void encoder_init(TIM_HandleTypeDef *htim);
-int32_t encoder_pos_counts(void);
+int32_t encoder_abs_count(void);
 int32_t encoder_revs(void);
 int32_t encoder_inrev(void);
 
 // To be called from IRQ handler when update (overflow/underflow) flag is set
+// NOTE: Update (overflow/underflow) IRQ fires only when 16-bit counter wraps (ARR+1 counts).
+// No periodic interrupt in between; counting works without IRQ. IRQ only extends to 32 bits.
 void encoder_irq_on_update(TIM_HandleTypeDef *htim);
 
 #ifdef __cplusplus

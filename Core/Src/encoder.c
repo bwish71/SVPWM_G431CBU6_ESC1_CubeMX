@@ -1,4 +1,6 @@
 #include "encoder.h"
+#include "main.h"
+
 
 volatile int32_t enc_hi32 = 0; // high 32 bits of the encoder position (extends the 16-bit hardware counter to 32 bits)
 

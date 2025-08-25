@@ -24,7 +24,6 @@
 #include "main.h"
 #include "tim.h"
 #include "usart.h"
-#include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -35,9 +34,15 @@
 #include <string.h> // Include standard I/O library for printf
 #include <stdio.h> // Include standard I/O library for printf
 #ifdef WEACT_BOARD
-	#include "usbd_cdc_if.h" // Include USB CDC interface for printing to USB
+#include "usbd_cdc_if.h" // Include USB CDC interface for printing to USB
 #endif
 #include "encoder.h" // Added: use encoder module API
+
+#include <math.h> // Include math library for cos() and sin()
+
+
+//#define DEBUG
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,7 +66,6 @@ extern TIM_HandleTypeDef htim4;
 /* USER CODE BEGIN PV */
 //char textBuf[100];
 // Removed local encoder extension state (handled in encoder.c)
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,16 +78,18 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN 0 */
 
 # ifdef WEACT_BOARD
-	void printText(char *text) {
-		while (CDC_Transmit_FS((uint8_t*) text, strlen(text)) == USBD_BUSY)
-			;
-	}
+void printText(char *text) {
+	while (CDC_Transmit_FS((uint8_t*) text, strlen(text)) == USBD_BUSY)
+		;
+}
 
-	int _write(int file, char *ptr, int len) {
-		// Wait until the USB CDC is ready
-		while (CDC_Transmit_FS((uint8_t*)ptr, len) == USBD_BUSY) {;}
-		return len;
+int _write(int file, char *ptr, int len) {
+	// Wait until the USB CDC is ready
+	while (CDC_Transmit_FS((uint8_t*) ptr, len) == USBD_BUSY) {
+		;
 	}
+	return len;
+}
 # elif defined(ESC_BOARD)
 // For ESC board, we use UART2 for debugging
 void printText(char *text) {
@@ -95,7 +101,6 @@ int _write(int file, char *ptr, int len) {
 	return len;
 }
 # endif
-
 
 /* USER CODE END 0 */
 
@@ -130,7 +135,6 @@ int main(void)
   MX_TIM1_Init();
   MX_USART2_UART_Init();
   MX_TIM4_Init();
-  MX_USB_Device_Init();
   /* USER CODE BEGIN 2 */
 
 	// Start the PWM outputs_
@@ -147,10 +151,9 @@ int main(void)
 	// adc_init();
 	encoder_init(&htim4);
 
-
 	SvpwmData data; // Declare the SVPWM data structure
-	data.VBus = 10; // Set the DC bus voltage in the SVPWM data structure
-	data.m = 0.2f; // Set the modulation index (max 0.57735f for 1/sqrt(3))
+	data.VBus = 10.0f; // Set the DC bus voltage in the SVPWM data structure
+	data.m = 1.0f/SQRT3; // Set the modulation index (max 0.57735f for 1/sqrt(3))
 
   /* USER CODE END 2 */
 
@@ -164,23 +167,32 @@ int main(void)
 	float grad = 0.0f; // running electrical angle in degrees
 
 	while (1) {
-		// Test only
-		for (;;) {
-		int32_t pos = encoder_pos_counts();
-		int32_t rev = encoder_revs();
-		int32_t fine = encoder_inrev();
-//		printf("HAL Reading: %ld\r\n", (long)__HAL_TIM_GET_COUNTER(&htim4));
 
-		printf("HAL Reading: %ld, Multi Turn Pos: %ld, Revolutions: %ld, Fine: %ld\r\n", (long)__HAL_TIM_GET_COUNTER(&htim4),(long)pos, (long)rev, (long)fine);
-	}
+#ifdef DEBUG2
+		int32_t pos_old = 0;
+		int32_t pos = __HAL_TIM_GET_COUNTER(&htim4);
+		if (pos != pos_old) {
+			printf("HAL Reading: %ld, enc_hi32: %ld\r\n", (long) pos,
+					(long) encoder_abs_count());
+			pos_old = pos;
+		}
+#endif
 
 		// Advance angle
 		grad += 0.01f;
-		if (grad >= 360.0f)
-			grad -= 360.0f;
+		if (grad >= 360.0f) {
+			grad = 0;
+		}
 
-		data.Vb = lookup_sin_interp(sinTable, grad) * data.m * data.VBus;
-		data.Va = lookup_cos_interp(sinTable, grad) * data.m * data.VBus;
+		// test
+		//grad = 0.0f;
+
+
+//		data.Vb = lookup_sin_interp(sinTable, grad) * data.m * data.VBus;
+//		data.Va = lookup_cos_interp(sinTable, grad) * data.m * data.VBus;
+		data.Vb = sinf(grad * (3.14159265358979323846f / 180.0f)) * data.m * data.VBus;
+		data.Va = cosf(grad * (3.14159265358979323846f / 180.0f)) * data.m * data.VBus;
+
 		svpwm_calculate(&data);
 
 		// Toggle Red LED on PC6
@@ -208,9 +220,8 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV2;

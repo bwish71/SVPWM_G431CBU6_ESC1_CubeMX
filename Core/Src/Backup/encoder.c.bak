@@ -1,7 +1,8 @@
 #include "encoder.h"
+#include "main.h"
 
-// Private module state
-static volatile int32_t enc_hi32 = 0; // high 16-bit extension
+
+volatile int32_t enc_hi32 = 0; // high 32 bits of the encoder position (extends the 16-bit hardware counter to 32 bits)
 
 // Local critical section helpers
 static inline uint32_t enc_crit_enter(void) {
@@ -29,7 +30,7 @@ void encoder_irq_on_update(TIM_HandleTypeDef *htim) {
     }
 }
 
-int32_t encoder_pos_counts(void) {
+int32_t encoder_abs_count(void) {
     uint32_t pm = enc_crit_enter();
     extern TIM_HandleTypeDef htim4; // declared in tim.c
     int32_t pos = enc_hi32 + (int16_t)__HAL_TIM_GET_COUNTER(&htim4);
@@ -38,10 +39,10 @@ int32_t encoder_pos_counts(void) {
 }
 
 int32_t encoder_revs(void) {
-    return encoder_pos_counts() / ENCODER_COUNTS_PER_REV; // FIX: previously returned only enc_hi32
+    return encoder_abs_count() / ENCODER_COUNTS_PER_REV; // FIX: previously returned only enc_hi32
 }
 
 int32_t encoder_inrev(void) {
-    int32_t p = encoder_pos_counts();
+    int32_t p = encoder_abs_count();
     return p - (p / ENCODER_COUNTS_PER_REV) * ENCODER_COUNTS_PER_REV;
 }
